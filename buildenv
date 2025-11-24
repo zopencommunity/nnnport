@@ -1,5 +1,5 @@
-# bump: nnn-version /NNN_VERSION="(.*)"/ https://github.com/jarun/nnn/archive/refs/tags/v5.1.tar.gz|semver:*
-# NNN_VERSION="V.R.M"
+# bump: nnn-version /NNN_VERSION="(.*)"/ https://github.com/jarun/nnn/releases|re:/nnn v([0-9.]+)/$1/|semver:*
+NNN_VERSION="5.1"
 
 ###
 ### Build control file for the nnn port
@@ -9,10 +9,10 @@
 ### Required Environment Variables
 ###
 export ZOPEN_BUILD_LINE="STABLE"
-export ZOPEN_STABLE_URL="https://github.com/jarun/nnn/archive/refs/tags/v5.1.tar.gz"
-export ZOPEN_STABLE_DEPS="make ncurses readline sed"
+export ZOPEN_STABLE_URL="https://github.com/jarun/nnn/archive/refs/tags/v${NNN_VERSION}.tar.gz"
+export ZOPEN_STABLE_DEPS="make ncurses readline sed pkgconfig coreutils"
 export ZOPEN_DEV_URL=""
-export ZOPEN_DEV_DEPS="make ncurses readline sed"
+export ZOPEN_DEV_DEPS="make ncurses readline sed pkgconfig"
 export ZOPEN_CATEGORIES="utilities"
 export ZOPEN_RUNTIME_DEPS=""
 # export ZOPEN_SYSTEM_PREREQ="zos25" # optional system pre-req (default=zos25)
@@ -21,10 +21,13 @@ export ZOPEN_RUNTIME_DEPS=""
 ###
 ### Build settings (Port type: BUILD, Build system: GNU Make)
 ###
+export ZOPEN_CONFIGURE="skip"
+export ZOPEN_CHECK="skip"
 ### Optional Settings for GNU Make build system (Autotools)
 #export ZOPEN_EXTRA_CONFIGURE_OPTS="--with-ssl" # Add any additional configure options here
-#export ZOPEN_EXTRA_CFLAGS="-mzos-target=zosv2r5" # Add any additional compiler options here
-
+export ZOPEN_INSTALL_OPTS="install PREFIX=\${ZOPEN_INSTALL_DIR}"
+#export ZOPEN_EXTRA_CFLAGS="" # Add any additional compiler options here
+export ZOPEN_EXTRA_CPPFLAGS="-D__XPLAT=1 -D_POSIX_C_SOURCE=200809L"
 
 ###
 ### Required user-supplied functions
@@ -42,7 +45,7 @@ zopen_check_results() {
 }
 
 zopen_get_version() {
-  echo "1.0.0" # Modify to echo the version of your tool/library
+  ./nnn -V
 }
 
 
