@@ -1,0 +1,182 @@
+diff --git a/src/nnn.c b/src/nnn.c
+index 6fbba10..c705ff5 100644
+--- a/src/nnn.c
++++ b/src/nnn.c
+@@ -64,7 +64,7 @@
+ #define NCURSES_WIDECHAR 1
+ #endif
+ #elif defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) \
+-	|| defined(__APPLE__) || defined(__sun)
++	|| defined(__APPLE__) || defined(__sun) || defined(__MVS__)
+ #ifndef _XOPEN_SOURCE_EXTENDED
+ #define _XOPEN_SOURCE_EXTENDED
+ #endif
+@@ -2070,7 +2070,7 @@ static void endselection(bool endselmode)
+ static int editselection(void)
+ {
+ 	int ret = -1;
+-	int fd, lines = 0;
++	int fd, line_count = 0;
+ 	ssize_t count;
+ 	struct stat sb;
+ 	time_t mtime;
+@@ -2150,20 +2150,20 @@ static int editselection(void)
+ 	for (--count; count > 0; --count) {
+ 		/* Replace every '\n' that separates two paths */
+ 		if (pselbuf[count] == '\n' && pselbuf[count + 1] == '/') {
+-			++lines;
++			++line_count;
+ 			pselbuf[count] = '\0';
+ 		}
+ 	}
+ 
+ 	/* Add a line for the last file */
+-	++lines;
++	++line_count;
+ 
+-	if (lines > nselected) {
++	if (line_count > nselected) {
+ 		DPRINTF_S("files added to selection");
+ 		goto emptyedit;
+ 	}
+ 
+-	nselected = lines;
++	nselected = line_count;
+ 	writesel(pselbuf, selbufpos - 1);
+ 
+ 	return 1;
+@@ -2645,8 +2645,8 @@ static void xrmfromsel(char *path, char *fpath)
+ 
+ static bool cpmv_rename(int choice, const char *path)
+ {
+-	int fd;
+-	uint_t count = 0, lines = 0;
++  int fd;
++  uint_t count = 0, line_count = 0;
+ 	bool ret = FALSE;
+ 	char *cmd = (choice == 'c' ? cp : mv);
+ 	char buf[sizeof(patterns[P_CPMVRNM]) + (MAX(sizeof(cp), sizeof(mv))) + (PATH_MAX << 1)];
+@@ -2677,10 +2677,10 @@ static bool cpmv_rename(int choice, const char *path)
+ 	if (fd == -1)
+ 		goto finish;
+ 
+-	lines = entries_in_file(fd, buf, sizeof(buf), NEWLINE_CHAR);
++	line_count = entries_in_file(fd, buf, sizeof(buf), NEWLINE_CHAR);
+ 	DPRINTF_U(count);
+ 	DPRINTF_U(lines);
+-	if (!lines || (2 * count != lines)) {
++	if (!line_count || (2 * count != line_count)) {
+ 		DPRINTF_S("num mismatch");
+ 		goto finish;
+ 	}
+@@ -2750,7 +2750,7 @@ static bool cpmvrm_selection(enum action sel, char *path)
+ static bool batch_rename(void)
+ {
+ 	int fd1, fd2;
+-	uint_t count = 0, lines = 0;
++	uint_t count = 0, line_count = 0;
+ 	bool dir = FALSE, ret = FALSE;
+ 	char foriginal[TMP_LEN_MAX] = {0};
+ 	static const char batchrenamecmd[] = "paste -d'\n' %s %s | "SED" 'N; /^\\(.*\\)\\n\\1$/!p;d' | "
+@@ -2798,10 +2798,10 @@ static bool batch_rename(void)
+ 	if (fd2 == -1)
+ 		goto finish;
+ 
+-	lines = entries_in_file(fd2, buf, sizeof(buf), NEWLINE_CHAR);
++	line_count = entries_in_file(fd2, buf, sizeof(buf), NEWLINE_CHAR);
+ 	DPRINTF_U(count);
+ 	DPRINTF_U(lines);
+-	if (!lines || (count != lines)) {
++	if (!line_count || (count != line_count)) {
+ 		DPRINTF_S("cannot delete files");
+ 		goto finish;
+ 	}
+@@ -5812,7 +5812,8 @@ static void dirwalk(char *path, int entnum, bool mountpoint)
+ 	core_data[core].core = (ushort_t)core;
+ 	core_data[core].mntpoint = mountpoint;
+ 
+-	pthread_t tid = 0;
++	pthread_t tid;
++  tid.__ = 0;
+ 
+ 	pthread_create(&tid, NULL, du_thread, (void *)&(core_data[core]));
+ 
+@@ -5901,14 +5902,16 @@ static int dentfill(char *path, struct entry **ppdents)
+ 	}
+ 
+ #if _POSIX_C_SOURCE >= 200112L
++#ifndef __MVS__
+ 	posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL);
++#endif
+ #endif
+ 
+ 	dp = readdir(dirp);
+ 	if (!dp)
+ 		goto exit;
+ 
+-#if defined(__sun) || defined(__HAIKU__)
++#if defined(__sun) || defined(__HAIKU__) || defined(__MVS__)
+ 	flags = AT_SYMLINK_NOFOLLOW; /* no d_type */
+ #else
+ 	if (cfg.blkorder || dp->d_type == DT_UNKNOWN) {
+@@ -6016,24 +6019,36 @@ static int dentfill(char *path, struct entry **ppdents)
+ 
+ 		/* Copy other fields */
+ 		if (cfg.timetype == T_MOD) {
+-			dentp->sec = sb.st_mtime;
+-#ifdef __APPLE__
++#if defined(__APPLE__)
++			dentp->sec = sb.st_mtimespec.tv_sec;
+ 			dentp->nsec = (uint_t)sb.st_mtimespec.tv_nsec;
++#elif defined(__MVS__)
++			dentp->sec = sb.st_mtime;
++			dentp->nsec = 0;
+ #else
++			dentp->sec = sb.st_mtim.tv_sec;
+ 			dentp->nsec = (uint_t)sb.st_mtim.tv_nsec;
+ #endif
+ 		} else if (cfg.timetype == T_ACCESS) {
+-			dentp->sec = sb.st_atime;
+-#ifdef __APPLE__
++#if defined(__APPLE__)
++			dentp->sec = sb.st_atimespec.tv_sec;
+ 			dentp->nsec = (uint_t)sb.st_atimespec.tv_nsec;
++#elif defined(__MVS__)
++			dentp->sec = sb.st_atime;
++			dentp->nsec = 0;
+ #else
++			dentp->sec = sb.st_atim.tv_sec;
+ 			dentp->nsec = (uint_t)sb.st_atim.tv_nsec;
+ #endif
+ 		} else {
+-			dentp->sec = sb.st_ctime;
+-#ifdef __APPLE__
++#if defined(__APPLE__)
++			dentp->sec = sb.st_ctimespec.tv_sec;
+ 			dentp->nsec = (uint_t)sb.st_ctimespec.tv_nsec;
++#elif defined(__MVS__)
++			dentp->sec = sb.st_ctime;
++			dentp->nsec = 0;
+ #else
++			dentp->sec = sb.st_ctim.tv_sec;
+ 			dentp->nsec = (uint_t)sb.st_ctim.tv_nsec;
+ #endif
+ 		}
+@@ -6041,7 +6056,7 @@ static int dentfill(char *path, struct entry **ppdents)
+ 		if ((gtimesecs - sb.st_mtime <= 300) || (gtimesecs - sb.st_ctime <= 300))
+ 			entflags |= FILE_YOUNG;
+ 
+-#if !(defined(__sun) || defined(__HAIKU__))
++#if !(defined(__sun) || defined(__HAIKU__) || defined(__MVS__))
+ 		if (!flags && dp->d_type == DT_LNK) {
+ 			 /* Do not add sizes for links */
+ 			dentp->mode = (sb.st_mode & ~S_IFMT) | S_IFLNK;
+@@ -6093,7 +6108,7 @@ static int dentfill(char *path, struct entry **ppdents)
+ 
+ 			if (S_ISDIR(sb.st_mode))
+ 				dentp->flags |= DIR_OR_DIRLNK;
+-#if !(defined(__sun) || defined(__HAIKU__)) /* no d_type */
++#if !(defined(__sun) || defined(__HAIKU__) || defined(__MVS__)) /* no d_type */
+ 		} else if (dp->d_type == DT_DIR || ((dp->d_type == DT_LNK
+ 			   || dp->d_type == DT_UNKNOWN) && S_ISDIR(sb.st_mode))) {
+ 			dentp->flags |= DIR_OR_DIRLNK;
