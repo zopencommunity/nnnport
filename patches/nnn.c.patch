@@ -1,18 +1,40 @@
 diff --git a/src/nnn.c b/src/nnn.c
-index 6fbba10..c705ff5 100644
+index 108e299..232580f 100644
 --- a/src/nnn.c
 +++ b/src/nnn.c
 @@ -64,7 +64,7 @@
  #define NCURSES_WIDECHAR 1
  #endif
  #elif defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) \
--	|| defined(__APPLE__) || defined(__sun)
-+	|| defined(__APPLE__) || defined(__sun) || defined(__MVS__)
+-	|| defined(__APPLE__) || defined(__sun) || defined(__DragonFly__)
++	|| defined(__APPLE__) || defined(__sun) || defined(__DragonFly__) || defined(__MVS__)
  #ifndef _XOPEN_SOURCE_EXTENDED
  #define _XOPEN_SOURCE_EXTENDED
  #endif
-@@ -2070,7 +2070,7 @@ static void endselection(bool endselmode)
- static int editselection(void)
+@@ -198,6 +198,21 @@
+ #define PROMPT          ">>> "
+ #undef NEWLINE
+ #define NEWLINE         "\n"
++
++#ifdef __MVS__
++#ifndef DT_UNKNOWN
++#define DT_UNKNOWN 0
++#endif
++#ifndef DT_DIR
++#define DT_DIR 4
++#endif
++#ifndef DT_REG
++#define DT_REG 8
++#endif
++#ifndef DT_LNK
++#define DT_LNK 10
++#endif
++#endif
+ #define NEWLINE_CHAR    '\n'
+ #define NUL_CHAR        '\0'
+ #define REGEX_MAX       48
+@@ -2110,7 +2125,7 @@ static void endselection(bool endselmode)
+ static int editselection(bool allowemptysel)
  {
  	int ret = -1;
 -	int fd, lines = 0;
@@ -20,7 +42,7 @@ index 6fbba10..c705ff5 100644
  	ssize_t count;
  	struct stat sb;
  	time_t mtime;
-@@ -2150,20 +2150,20 @@ static int editselection(void)
+@@ -2206,20 +2221,20 @@ static int editselection(bool allowemptysel)
  	for (--count; count > 0; --count) {
  		/* Replace every '\n' that separates two paths */
  		if (pselbuf[count] == '\n' && pselbuf[count + 1] == '/') {
@@ -34,8 +56,8 @@ index 6fbba10..c705ff5 100644
 -	++lines;
 +	++line_count;
  
--	if (lines > nselected) {
-+	if (line_count > nselected) {
+-	if (!allowemptysel && (lines > nselected)) {
++	if (!allowemptysel && (line_count > nselected)) {
  		DPRINTF_S("files added to selection");
  		goto emptyedit;
  	}
@@ -45,7 +67,7 @@ index 6fbba10..c705ff5 100644
  	writesel(pselbuf, selbufpos - 1);
  
  	return 1;
-@@ -2645,8 +2645,8 @@ static void xrmfromsel(char *path, char *fpath)
+@@ -2699,8 +2714,8 @@ static void xrmfromsel(char *path, char *fpath)
  
  static bool cpmv_rename(int choice, const char *path)
  {
@@ -56,7 +78,7 @@ index 6fbba10..c705ff5 100644
  	bool ret = FALSE;
  	char *cmd = (choice == 'c' ? cp : mv);
  	char buf[sizeof(patterns[P_CPMVRNM]) + (MAX(sizeof(cp), sizeof(mv))) + (PATH_MAX << 1)];
-@@ -2677,10 +2677,10 @@ static bool cpmv_rename(int choice, const char *path)
+@@ -2731,10 +2746,10 @@ static bool cpmv_rename(int choice, const char *path)
  	if (fd == -1)
  		goto finish;
  
@@ -69,7 +91,7 @@ index 6fbba10..c705ff5 100644
  		DPRINTF_S("num mismatch");
  		goto finish;
  	}
-@@ -2750,7 +2750,7 @@ static bool cpmvrm_selection(enum action sel, char *path)
+@@ -2807,7 +2822,7 @@ static bool cpmvrm_selection(enum action sel, char *path)
  static bool batch_rename(void)
  {
  	int fd1, fd2;
@@ -78,7 +100,7 @@ index 6fbba10..c705ff5 100644
  	bool dir = FALSE, ret = FALSE;
  	char foriginal[TMP_LEN_MAX] = {0};
  	static const char batchrenamecmd[] = "paste -d'\n' %s %s | "SED" 'N; /^\\(.*\\)\\n\\1$/!p;d' | "
-@@ -2798,10 +2798,10 @@ static bool batch_rename(void)
+@@ -2855,10 +2870,10 @@ static bool batch_rename(void)
  	if (fd2 == -1)
  		goto finish;
  
@@ -91,17 +113,19 @@ index 6fbba10..c705ff5 100644
  		DPRINTF_S("cannot delete files");
  		goto finish;
  	}
-@@ -5812,7 +5812,8 @@ static void dirwalk(char *path, int entnum, bool mountpoint)
- 	core_data[core].core = (ushort_t)core;
- 	core_data[core].mntpoint = mountpoint;
+@@ -6421,7 +6436,11 @@ static void du_walk_dir(const char *root, du_group *group, bool count_root, ullo
+ 		if (selforparent(dp->d_name))
+ 			continue;
  
--	pthread_t tid = 0;
-+	pthread_t tid;
-+  tid.__ = 0;
- 
- 	pthread_create(&tid, NULL, du_thread, (void *)&(core_data[core]));
- 
-@@ -5901,14 +5902,16 @@ static int dentfill(char *path, struct entry **ppdents)
++#ifdef __MVS__
++		const unsigned char dtype = DT_UNKNOWN;
++#else
+ 		const unsigned char dtype = dp->d_type;
++#endif
+ 		bool is_dir = (dtype == DT_DIR);
+ 		bool is_reg = (dtype == DT_REG);
+ 		bool sb_valid = false;
+@@ -6690,14 +6709,16 @@ static int dentfill(char *path, struct entry **ppdents)
  	}
  
  #if _POSIX_C_SOURCE >= 200112L
@@ -119,7 +143,7 @@ index 6fbba10..c705ff5 100644
  	flags = AT_SYMLINK_NOFOLLOW; /* no d_type */
  #else
  	if (cfg.blkorder || dp->d_type == DT_UNKNOWN) {
-@@ -6016,24 +6019,36 @@ static int dentfill(char *path, struct entry **ppdents)
+@@ -6819,24 +6840,36 @@ static int dentfill(char *path, struct entry **ppdents)
  
  		/* Copy other fields */
  		if (cfg.timetype == T_MOD) {
@@ -162,7 +186,7 @@ index 6fbba10..c705ff5 100644
  			dentp->nsec = (uint_t)sb.st_ctim.tv_nsec;
  #endif
  		}
-@@ -6041,7 +6056,7 @@ static int dentfill(char *path, struct entry **ppdents)
+@@ -6844,7 +6877,7 @@ static int dentfill(char *path, struct entry **ppdents)
  		if ((gtimesecs - sb.st_mtime <= 300) || (gtimesecs - sb.st_ctime <= 300))
  			entflags |= FILE_YOUNG;
  
@@ -171,7 +195,7 @@ index 6fbba10..c705ff5 100644
  		if (!flags && dp->d_type == DT_LNK) {
  			 /* Do not add sizes for links */
  			dentp->mode = (sb.st_mode & ~S_IFMT) | S_IFLNK;
-@@ -6093,7 +6108,7 @@ static int dentfill(char *path, struct entry **ppdents)
+@@ -6906,7 +6939,7 @@ static int dentfill(char *path, struct entry **ppdents)
  
  			if (S_ISDIR(sb.st_mode))
  				dentp->flags |= DIR_OR_DIRLNK;

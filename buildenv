@@ -1,5 +1,5 @@
-# bump: nnn-version /NNN_VERSION="(.*)"/ https://github.com/jarun/nnn/releases|re:/nnn v([0-9.]+)/$1/|semver:*
-NNN_VERSION="5.1"
+# bump: nnn-version /NNN_VERSION="(.*)"/ git:https://github.com/jarun/nnn.git|semver:*
+NNN_VERSION="5.2"
 
 ###
 ### Build control file for the nnn port
@@ -9,7 +9,8 @@ NNN_VERSION="5.1"
 ### Required Environment Variables
 ###
 export ZOPEN_BUILD_LINE="STABLE"
-export ZOPEN_STABLE_URL="https://github.com/jarun/nnn/archive/refs/tags/v${NNN_VERSION}.tar.gz"
+export ZOPEN_STABLE_URL="https://github.com/jarun/nnn.git"
+export ZOPEN_STABLE_TAG="v${NNN_VERSION}"
 export ZOPEN_STABLE_DEPS="make ncurses readline sed pkgconfig coreutils"
 export ZOPEN_DEV_URL=""
 export ZOPEN_DEV_DEPS="make ncurses readline sed pkgconfig"
