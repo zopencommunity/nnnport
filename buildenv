@@ -1,5 +1,5 @@
 # bump: nnn-version /NNN_VERSION="(.*)"/ git:https://github.com/jarun/nnn.git|semver:*
-NNN_VERSION="5.2"
+NNN_VERSION="5.3"
 
 ###
 ### Build control file for the nnn port
